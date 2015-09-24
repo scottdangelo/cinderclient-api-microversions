@@ -129,6 +129,22 @@ class NotFound(ClientException):
     message = "Not found"
 
 
+class NotAcceptable(ClientException):
+    """
+    HTTP 406 - Not Acceptable
+    """
+    http_status = 406
+    message = "Not Acceptable"
+
+
+class Conflict(ClientException):
+    """
+    HTTP 409 - Conflict
+    """
+    http_status = 409
+    message = "Conflict"
+
+
 class OverLimit(ClientException):
     """
     HTTP 413 - Over limit: you're over the API limits for this time period.
@@ -154,6 +170,7 @@ class HTTPNotImplemented(ClientException):
 # Instead, we have to hardcode it:
 _code_map = dict((c.http_status, c) for c in [BadRequest, Unauthorized,
                                               Forbidden, NotFound,
+                                              NotAcceptable, Conflict,
                                               OverLimit, HTTPNotImplemented])
 
 

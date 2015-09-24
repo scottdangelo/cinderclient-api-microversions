@@ -54,7 +54,7 @@ class Client(object):
                  service_type='volumev2', service_name=None,
                  volume_service_name=None, bypass_url=None, retries=None,
                  http_log_debug=False, cacert=None, auth_system='keystone',
-                 auth_plugin=None, session=None, **kwargs):
+                 auth_plugin=None, session=None, api_version=None,**kwargs):
         # FIXME(comstud): Rename the api_key argument above when we
         # know it's not being used as keyword argument
         password = api_key
@@ -82,6 +82,7 @@ class Client(object):
             availability_zones.AvailabilityZoneManager(self)
         self.pools = pools.PoolManager(self)
         self.capabilities = capabilities.CapabilitiesManager(self)
+        self.api_version = api_version or api_versions.APIVersion("2.0")
 
         # Add in any extensions...
         if extensions:
@@ -112,6 +113,7 @@ class Client(object):
             auth_system=auth_system,
             auth_plugin=auth_plugin,
             session=session,
+            api_version=api_version,
             **kwargs)
 
     def authenticate(self):

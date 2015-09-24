@@ -30,6 +30,7 @@ from keystoneclient.auth.identity import base
 from keystoneclient import discover
 import requests
 
+from cinderclient import api_versions
 from cinderclient import exceptions
 from cinderclient.openstack.common import importutils
 from cinderclient.openstack.common import strutils
@@ -148,7 +149,8 @@ class HTTPClient(object):
                  service_name=None, volume_service_name=None,
                  bypass_url=None, retries=None,
                  http_log_debug=False, cacert=None,
-                 auth_system='keystone', auth_plugin=None):
+                 auth_system='keystone', auth_plugin=None,
+                 api_version=None):
         self.user = user
         self.password = password
         self.projectid = projectid
@@ -164,6 +166,8 @@ class HTTPClient(object):
 
         self.auth_url = auth_url.rstrip('/') if auth_url else None
         self.version = 'v1'
+        self.api_version = kwargs.pop('api_version', None)
+        self.api_version = self.api_version or api_versions.APIVersion()
         self.region_name = region_name
         self.endpoint_type = endpoint_type
         self.service_type = service_type
@@ -228,6 +232,7 @@ class HTTPClient(object):
         kwargs.setdefault('headers', kwargs.get('headers', {}))
         kwargs['headers']['User-Agent'] = self.USER_AGENT
         kwargs['headers']['Accept'] = 'application/json'
+        api_versions.update_headers(kwargs["headers"], self.api_version)
 
         if osprofiler_web:
             kwargs['headers'].update(osprofiler_web.get_trace_id_headers())
@@ -516,6 +521,7 @@ def _construct_http_client(username=None, password=None, project_id=None,
                            cacert=None, tenant_id=None,
                            session=None,
                            auth=None,
+                           api_version=None,
                            **kwargs):
 
     # Don't use sessions if third party plugin is used
@@ -551,24 +557,52 @@ def _construct_http_client(username=None, password=None, project_id=None,
                           cacert=cacert,
                           auth_system=auth_system,
                           auth_plugin=auth_plugin,
+                          api_version=api_version 
                           )
 
 
-def get_client_class(version):
-    version_map = {
-        '1': 'cinderclient.v1.client.Client',
-        '2': 'cinderclient.v2.client.Client',
-    }
-    try:
-        client_path = version_map[str(version)]
-    except (KeyError, ValueError):
-        msg = "Invalid client version '%s'. must be one of: %s" % (
-            (version, ', '.join(version_map)))
-        raise exceptions.UnsupportedVersion(msg)
+def _get_client_class_and_version(version):
+    if not isinstance(version, api_versions.APIVersion):
+        version = api_versions.get_api_version(version)
+    else:
+        api_versions.check_major_version(version)
+    if version.is_latest():
+        raise exceptions.UnsupportedVersion(
+            _("The version should be explicit, not latest."))
+    return version, importutils.import_class(
+        "novaclient.v%s.client.Client" % version.ver_major)
 
-    return importutils.import_class(client_path)
+
+def get_client_class(version):
+    """Returns Client class based on given version."""
+    warnings.warn(_LW("'get_client_class' is deprecated. "
+                      "Please use `novaclient.client.Client` instead."))
+    _api_version, client_class = _get_client_class_and_version(version)
+    return client_class
 
 
 def Client(version, *args, **kwargs):
-    client_class = get_client_class(version)
-    return client_class(*args, **kwargs)
+    """Initialize client object based on given version.
+
+    HOW-TO:
+    The simplest way to create a client instance is initialization with your
+    credentials::
+
+        >>> from novaclient import client
+        >>> nova = client.Client(VERSION, USERNAME, PASSWORD,
+        ...                      PROJECT_ID, AUTH_URL)
+
+    Here ``VERSION`` can be a string or
+    ``novaclient.api_versions.APIVersion`` obj. If you prefer string value,
+    you can use ``1.1`` (deprecated now), ``2`` or ``2.X``
+    (where X is a microversion).
+
+
+    Alternatively, you can create a client instance using the keystoneclient
+    session API. See "The novaclient Python API" page at
+    python-novaclient's doc.
+    """
+    api_version, client_class = _get_client_class_and_version(version)
+    kwargs.pop("direct_use", None)
+    return client_class(api_version=api_version, direct_use=False,
+                        *args, **kwargs)
